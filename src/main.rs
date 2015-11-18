@@ -1,3 +1,5 @@
+#![feature(raw)]
+
 extern crate png;
 extern crate freetype;
 
@@ -7,5 +9,5 @@ use lib::*;
 
 fn main() {
     let mut render = CharImageRender::new();
-    render.render('A');
+    render.render('A', &RenderOption { size: 36 });
 }
