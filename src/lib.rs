@@ -4,7 +4,10 @@ extern crate libc;
 
 use std::ptr::null_mut;
 use std::ops::Drop;
+use std::fmt;
+
 use freetype::freetype::*;
+use png::{Image, PixelsByColorType};
 
 pub struct RenderOption {
     pub size: i32,//font pixel size
@@ -22,7 +25,6 @@ pub struct Bitmap {
     pub pitch: i32,
     pub buffer: Vec<u8>,
 }
-
 
 impl Bitmap {
     pub fn new(w: i32, h: i32, pitch: i32) -> Self {
@@ -54,6 +56,57 @@ impl Bitmap {
             buffer: buf,
         }
     }
+
+    pub fn to_png_image(self) -> Image {
+        Image {
+            width: self.w as u32,
+            height: self.h as u32,
+            pixels: PixelsByColorType::K8(self.buffer),
+        }
+    }
+
+    fn bitmap_blit(src: &Bitmap, left: i32, top: i32, dst: &mut Bitmap) {
+        use std::cmp::{max, min};
+
+        let x1 = max(left, 0);
+        let x2 = min(left + src.w, dst.w);
+        if x2 <= x1 {
+            return;
+        }
+
+        let y1 = max(top, 0);
+        let y2 = min(top + src.h, dst.h);
+        if y2 <= y1 {
+            return;
+        }
+
+        let mut y = y1;
+        while y < y2 {
+            let mut x = x1;
+            while x < x2 {
+                dst.buffer[(y * dst.pitch + x) as usize] |= src.buffer[((y - top) * src.pitch + (x - left)) as usize];
+                x += 1;
+            }
+            y += 1;
+        }
+    }
+}
+
+impl fmt::Display for Bitmap {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        for i in 0..self.h {
+            for j in 0..self.w {
+                let pixel = self.buffer[(self.pitch * i + j) as usize];
+                if pixel > 0 {
+                    try!(write!(f, "{:02x}", pixel));
+                } else {
+                    try!(write!(f, ".."));
+                }
+            }
+            try!(write!(f, "\r\n"));
+        }
+        Ok(())
+    }
 }
 
 impl CharImageRender {
@@ -83,51 +136,9 @@ impl CharImageRender {
             FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
 
             let bitmap = Bitmap::from_ft_bitmap(&(*slot).bitmap);
-            Self::bitmap_blit(&bitmap, (opt.size - bitmap.w) / 2, (opt.size - bitmap.h) / 2, &mut img);
+            Bitmap::bitmap_blit(&bitmap, (opt.size - bitmap.w) / 2, (opt.size - bitmap.h) / 2, &mut img);
         }
-        Self::print_bitmap(&img);
-        println!("");
         img
-    }
-
-    fn bitmap_blit(src: &Bitmap, left: i32, top: i32, dst: &mut Bitmap) {
-        use std::cmp::{max, min};
-
-        let x1 = max(left, 0);
-        let x2 = min(left + src.w, dst.w);
-        if x2 <= x1 {
-            return;
-        }
-
-        let y1 = max(top, 0);
-        let y2 = min(top + src.h, dst.h);
-        if y2 <= y1 {
-            return;
-        }
-
-        let mut y = y1;
-        while y < y2 {
-            let mut x = x1;
-            while x < x2 {
-                dst.buffer[(y * dst.pitch + x) as usize] |= src.buffer[((y - top) * src.pitch + (x - left)) as usize];
-                x += 1;
-            }
-            y += 1;
-        }
-    }
-
-    fn print_bitmap(bitmap: &Bitmap) {
-        for i in 0..bitmap.h {
-            for j in 0..bitmap.w {
-                let pixel = bitmap.buffer[(bitmap.pitch * i + j) as usize];
-                if pixel > 0 {
-                    print!("{:02x}", pixel);
-                } else {
-                    print!("..");
-                }
-            }
-            println!("");
-        }
     }
 }
 
