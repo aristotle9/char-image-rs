@@ -162,6 +162,7 @@ impl CharImageRender {
         unsafe {
             FT_New_Face(ft_lib, ptr as *mut i8, 0, &mut ft_face);
         }
+        assert!(ft_face != null_mut());
         CharImageRender {
             ft_lib: ft_lib,
             ft_face: ft_face,
