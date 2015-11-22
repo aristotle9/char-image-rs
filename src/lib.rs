@@ -36,14 +36,14 @@ pub struct Bitmap {
 pub fn get_bg_color(c: char) -> u32 {
     match (c as u32) % 9 {
         0 => 0x45BDF3,
-		1 => 0xE08F70,
-		2 => 0x4DB6AC,
-		3 => 0x9575CD,
-		4 => 0xB0855E,
-		5 => 0xF06292,
-		6 => 0xA3D36C,
-		7 => 0x7986CB,
-		_ => 0xF1B91D,
+        1 => 0xE08F70,
+        2 => 0x4DB6AC,
+        3 => 0x9575CD,
+        4 => 0xB0855E,
+        5 => 0xF06292,
+        6 => 0xA3D36C,
+        7 => 0x7986CB,
+        _ => 0xF1B91D,
     }
 }
 
