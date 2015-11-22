@@ -8,5 +8,5 @@ build = "build.rs"
 libc = "0.2"
 freetype = { git = "https://github.com/servo/rust-freetype.git" }
 png = { git = "https://github.com/servo/rust-png.git" }
-hyper = "0.6"
-url = "0.5"
+iron = "0.2"
+url = "0.2"

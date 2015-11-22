@@ -1,13 +1,16 @@
 extern crate png;
 extern crate freetype;
-extern crate hyper;
+extern crate iron;
 extern crate url;
 
 mod lib;
 use lib::*;
 
-use hyper::Server;
-use hyper::server::{Request, Response};
+use iron::prelude::Request;
+use iron::prelude::Response;
+use iron::prelude::Iron;
+use iron::mime::Mime;
+use iron::status;
 use png::{to_vec, store_png};
 
 const RENDER_OPTION: RenderOption = RenderOption { size: 72, padding: 50};
@@ -20,18 +23,16 @@ fn png_image_from_char(c: char) -> Vec<u8> {
 }
 
 fn main() {
-    Server::http("127.0.0.1:3000").expect("start server failed!").handle(|req: Request, mut res: Response| {
-        if req.method == hyper::method::Method::Get {
-            let uri = match req.uri {
-                hyper::uri::RequestUri::AbsolutePath(uri) => url::percent_encoding::lossy_utf8_percent_decode(uri.as_bytes()),
-                _ => String::new()
-            };
-            let c = uri.chars().nth(1).unwrap_or('X');
+    Iron::new(|req: &mut Request| {
+        if req.method == iron::method::Method::Get {
+            let path = req.url.path.first().unwrap();
+            let path = url::percent_encoding::lossy_utf8_percent_decode(path.as_bytes());
+            let c = path.chars().nth(0).unwrap_or('X');
             let img = png_image_from_char(c);
-            res.headers_mut().set_raw("content-type", vec![b"image/png".to_vec()]);
-            res.send(&img).expect("send image failed");
+            let content_type = "image/png".parse::<Mime>().unwrap();
+            Ok(Response::with((content_type, status::Ok, img)))
         } else {
-            *res.status_mut() = hyper::status::StatusCode::NotFound;
+            Ok(Response::with((status::NotFound)))
         }
-    }).expect("add handle failed");
+    }).http("127.0.0.1:3000").expect("start server failed");
 }
