@@ -8,7 +8,6 @@ use lib::*;
 
 use std::collections::BTreeMap;
 use std::sync::RwLock;
-use std::borrow::Borrow;
 
 use iron::prelude::Request;
 use iron::prelude::Response;
@@ -56,7 +55,7 @@ impl Handler for CharImageHandler {
             let cache = self.cache.read().unwrap();
             let img = cache.get(&c).unwrap();
             let content_type = "image/png".parse::<Mime>().unwrap();
-            Ok(Response::with((content_type, status::Ok, Borrow::<[u8]>::borrow(img))))
+            Ok(Response::with((content_type, status::Ok, &**img)))
         } else {
             Ok(Response::with((status::NotFound)))
         }
