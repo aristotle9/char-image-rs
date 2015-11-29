@@ -183,6 +183,58 @@ impl CharImageRender {
         }
         img
     }
+
+    pub fn render_svg(&mut self, ch: char, opt: &RenderOption) -> String {
+        unsafe {
+            FT_Set_Pixel_Sizes(self.ft_face, 0, opt.size as u32);
+            FT_Load_Char(self.ft_face, ch as u64, FT_LOAD_DEFAULT);
+
+            let slot: FT_GlyphSlot = (*self.ft_face).glyph as FT_GlyphSlot;
+            let mut bbox: FT_BBox = struct_FT_BBox_ {
+                xMin: 0,
+                yMin: 0,
+                xMax: 0,
+                yMax: 0,
+            };
+            FT_Outline_Get_BBox(&mut (*slot).outline, &mut bbox);
+            let path = Self::svg_path(&mut (*slot).outline);
+
+            Self::svg_img(path, &bbox)
+        }
+    }
+
+    fn svg_path(outline: &mut FT_Outline) -> String {
+        use std::io::Write;
+
+        let funcs: FT_Outline_Funcs = struct_FT_Outline_Funcs_ {
+            move_to: ft_outline_move_to_func as *mut u8,
+            line_to: ft_outline_line_to_func as *mut u8,
+            conic_to: ft_outline_conic_to_funct as *mut u8,
+            cubic_to: ft_outline_cubic_to_funct as *mut u8,
+            shift: 0,
+            delta: 0,
+        };
+        let mut path_elems: Box<Vec<SVGPathElem>> = Box::new(Vec::new());
+        unsafe {
+            FT_Outline_Decompose(outline, &funcs, &mut *path_elems as *mut _ as *mut libc::c_void);
+        }
+        let mut buf = Vec::new();
+        for e in path_elems.iter() {
+            write!(&mut buf, "{}", e);
+        }
+        String::from_utf8(buf).unwrap()
+    }
+
+    fn svg_img(path: String, bbox: &FT_BBox) -> String {
+        format!(r#"<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<svg xmlns='http://www.w3.org/2000/svg' version='1.0' width='{}' height='{}'>
+    <g transform='scale(1 -1) translate(0 -{})'>
+        <path d='{}' style='fill: #ffffff'/>
+    </g>
+</svg>
+"#, bbox.xMax >> 6, bbox.yMax >> 6, bbox.yMax >> 6, path)
+    }
 }
 
 impl Drop for CharImageRender {
@@ -192,4 +244,60 @@ impl Drop for CharImageRender {
             FT_Done_FreeType(self.ft_lib);
         }
     }
+}
+
+#[derive(Debug)]
+enum SVGPathElem {
+    MoveTo(i64, i64),
+    LineTo(i64, i64),
+    ConicTo(i64, i64, i64, i64),
+    CubicTo(i64, i64, i64, i64, i64, i64),
+}
+
+impl fmt::Display for SVGPathElem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            SVGPathElem::MoveTo(x, y) => write!(f, "M{} {}\n", x, y),
+            SVGPathElem::LineTo(x, y) => write!(f, "L{} {}\n", x, y),
+            SVGPathElem::ConicTo(cx, cy, x, y) => write!(f, "Q{} {} {} {}\n", cx, cy, x, y),
+            SVGPathElem::CubicTo(c1x, c1y, c2x, c2y, x, y) => write!(f, "C{} {} {} {} {} {}\n", c1x, c1y, c2x, c2y, x, y),
+        }
+    }
+}
+
+extern fn ft_outline_move_to_func(to: *const FT_Vector, user: *mut libc::c_void) -> libc::c_int {
+    let elems: &mut Vec<SVGPathElem> = unsafe { &mut *(user as *mut Vec<SVGPathElem>) };
+    let to: &FT_Vector = unsafe { &*to };
+    elems.push(SVGPathElem::MoveTo(to.x >> 6, to.y >> 6));
+    0
+}
+
+extern fn ft_outline_line_to_func(to: *const FT_Vector, user: *mut libc::c_void) -> libc::c_int {
+    let elems: &mut Vec<SVGPathElem> = unsafe { &mut *(user as *mut Vec<SVGPathElem>) };
+    let to: &FT_Vector = unsafe { &*to };
+    elems.push(SVGPathElem::LineTo(to.x >> 6, to.y >> 6));
+    0
+}
+
+extern fn ft_outline_conic_to_funct(control: *const FT_Vector, to: *const FT_Vector, user: *mut libc::c_void) -> libc::c_int {
+    let elems: &mut Vec<SVGPathElem> = unsafe { &mut *(user as *mut Vec<SVGPathElem>) };
+    let control: &FT_Vector = unsafe { &*control };
+    let to: &FT_Vector = unsafe { &*to };
+    elems.push(SVGPathElem::ConicTo(control.x >> 6, control.y >> 6, to.x >> 6, to.y >> 6));
+    0
+}
+
+extern fn ft_outline_cubic_to_funct(control1: *const FT_Vector, control2: *const FT_Vector, to: *const FT_Vector, user: *mut libc::c_void) -> libc::c_int {
+    let elems: &mut Vec<SVGPathElem> = unsafe { &mut *(user as *mut Vec<SVGPathElem>) };
+    let control1: &FT_Vector = unsafe { &*control1 };
+    let control2: &FT_Vector = unsafe { &*control2 };
+    let to: &FT_Vector = unsafe { &*to };
+    elems.push(SVGPathElem::CubicTo(control1.x >> 6, control1.y >> 6, control2.x >> 6, control2.y >> 6, to.x >> 6, to.y >> 6));
+    0
+}
+
+#[link(name="freetype")]
+extern {
+    pub fn FT_Outline_Decompose(outline: *mut FT_Outline, func_interface: *const FT_Outline_Funcs, user: *mut libc::c_void) -> FT_Error;
+    pub fn FT_Outline_Get_BBox(outline: *mut FT_Outline, abbox: *mut FT_BBox) -> FT_Error;
 }
