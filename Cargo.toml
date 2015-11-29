@@ -10,3 +10,4 @@ freetype = { git = "https://github.com/servo/rust-freetype.git" }
 png = { git = "https://github.com/servo/rust-png.git" }
 iron = "0.2"
 url = "0.2"
+params = "0.0"
