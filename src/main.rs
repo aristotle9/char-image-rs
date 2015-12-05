@@ -32,7 +32,7 @@ fn png_image_from_char(c: char) -> Vec<u8> {
 
 fn svg_from_char(c: char) -> Vec<u8> {
     let mut render = CharImageRender::new();
-    let img = render.render_svg(c, &RENDER_OPTION);
+    let img = render.render_svg(c, &RENDER_OPTION, get_bg_color(c));
     img.into_bytes()
 }
 

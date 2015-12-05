@@ -19,6 +19,11 @@ impl RenderOption {
         let a = self.size + self.padding;
         Bitmap::new(a, a, a)
     }
+
+    #[inline]
+    fn get_image_size(&self) -> i32 {
+        self.size + self.padding
+    }
 }
 
 pub struct CharImageRender {
@@ -184,7 +189,7 @@ impl CharImageRender {
         img
     }
 
-    pub fn render_svg(&mut self, ch: char, opt: &RenderOption) -> String {
+    pub fn render_svg(&mut self, ch: char, opt: &RenderOption, bg_color: u32) -> String {
         unsafe {
             FT_Set_Pixel_Sizes(self.ft_face, 0, opt.size as u32);
             FT_Load_Char(self.ft_face, ch as u64, FT_LOAD_DEFAULT);
@@ -199,7 +204,7 @@ impl CharImageRender {
             FT_Outline_Get_BBox(&mut (*slot).outline, &mut bbox);
             let path = Self::svg_path(&mut (*slot).outline);
 
-            Self::svg_img(path, &bbox)
+            Self::svg_img(path, &bbox, opt, bg_color)
         }
     }
 
@@ -225,15 +230,24 @@ impl CharImageRender {
         String::from_utf8(buf).unwrap()
     }
 
-    fn svg_img(path: String, bbox: &FT_BBox) -> String {
+    fn svg_img(path: String, bbox: &FT_BBox, opt: &RenderOption, bg_color: u32) -> String {
+        let x1 = bbox.xMin as f64 / 64f64;
+        let x2 = bbox.xMax as f64 / 64f64;
+        let y1 = bbox.yMin as f64 / 64f64;
+        let y2 = bbox.yMax as f64 / 64f64;
+        let w = x2 - x1;
+        let h = y2 - y1;
+        let dx = (opt.get_image_size() as f64 - w) / 2f64;
+        let dy = (opt.get_image_size() as f64 - h) / 2f64;
         format!(r#"<?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
 <svg xmlns='http://www.w3.org/2000/svg' version='1.0' width='{}' height='{}'>
-    <g transform='scale(1 -1) translate(0 -{})'>
+    <rect width="100%" height="100%" style="fill: #{:06x}" />
+    <g transform='scale(1 -1) translate({} {})'>
         <path d='{}' style='fill: #ffffff'/>
     </g>
 </svg>
-"#, bbox.xMax >> 6, bbox.yMax >> 6, bbox.yMax >> 6, path)
+"#, opt.get_image_size(), opt.get_image_size(), bg_color, -x1 + dx, -y2 - dy, path)
     }
 }
 
@@ -248,10 +262,10 @@ impl Drop for CharImageRender {
 
 #[derive(Debug)]
 enum SVGPathElem {
-    MoveTo(i64, i64),
-    LineTo(i64, i64),
-    ConicTo(i64, i64, i64, i64),
-    CubicTo(i64, i64, i64, i64, i64, i64),
+    MoveTo(f64, f64),
+    LineTo(f64, f64),
+    ConicTo(f64, f64, f64, f64),
+    CubicTo(f64, f64, f64, f64, f64, f64),
 }
 
 impl fmt::Display for SVGPathElem {
@@ -268,14 +282,14 @@ impl fmt::Display for SVGPathElem {
 extern fn ft_outline_move_to_func(to: *const FT_Vector, user: *mut libc::c_void) -> libc::c_int {
     let elems: &mut Vec<SVGPathElem> = unsafe { &mut *(user as *mut Vec<SVGPathElem>) };
     let to: &FT_Vector = unsafe { &*to };
-    elems.push(SVGPathElem::MoveTo(to.x >> 6, to.y >> 6));
+    elems.push(SVGPathElem::MoveTo(to.x as f64 / 64f64, to.y as f64 / 64f64));
     0
 }
 
 extern fn ft_outline_line_to_func(to: *const FT_Vector, user: *mut libc::c_void) -> libc::c_int {
     let elems: &mut Vec<SVGPathElem> = unsafe { &mut *(user as *mut Vec<SVGPathElem>) };
     let to: &FT_Vector = unsafe { &*to };
-    elems.push(SVGPathElem::LineTo(to.x >> 6, to.y >> 6));
+    elems.push(SVGPathElem::LineTo(to.x as f64 / 64f64, to.y as f64 / 64f64));
     0
 }
 
@@ -283,7 +297,7 @@ extern fn ft_outline_conic_to_funct(control: *const FT_Vector, to: *const FT_Vec
     let elems: &mut Vec<SVGPathElem> = unsafe { &mut *(user as *mut Vec<SVGPathElem>) };
     let control: &FT_Vector = unsafe { &*control };
     let to: &FT_Vector = unsafe { &*to };
-    elems.push(SVGPathElem::ConicTo(control.x >> 6, control.y >> 6, to.x >> 6, to.y >> 6));
+    elems.push(SVGPathElem::ConicTo(control.x as f64 / 64f64, control.y as f64 / 64f64, to.x as f64 / 64f64, to.y as f64 / 64f64));
     0
 }
 
@@ -292,7 +306,7 @@ extern fn ft_outline_cubic_to_funct(control1: *const FT_Vector, control2: *const
     let control1: &FT_Vector = unsafe { &*control1 };
     let control2: &FT_Vector = unsafe { &*control2 };
     let to: &FT_Vector = unsafe { &*to };
-    elems.push(SVGPathElem::CubicTo(control1.x >> 6, control1.y >> 6, control2.x >> 6, control2.y >> 6, to.x >> 6, to.y >> 6));
+    elems.push(SVGPathElem::CubicTo(control1.x as f64 / 64f64, control1.y as f64 / 64f64, control2.x as f64 / 64f64, control2.y as f64 / 64f64, to.x as f64 / 64f64, to.y as f64 / 64f64));
     0
 }
 
